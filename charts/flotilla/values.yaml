@@ -109,3 +109,6 @@ gateway:
 
 tests:
   image: busybox:1.38.0
+
+networkPolicies:
+  enabled: true

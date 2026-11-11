@@ -70,7 +70,7 @@ check_http() {
 }
 
 echo ""
-echo "Running 7 end-to-end checks against ${BASE_URL}..."
+echo "Running 8 end-to-end checks against ${BASE_URL}..."
 echo ""
 
 # 1. Auth route is not publicly exposed — gateway catch-all returns 404
@@ -131,6 +131,53 @@ if [ "$total_items" -ge 1 ] && [ "$total_qty" -ge 3 ]; then
   pass "[7] Stats: totalItems=${total_items} (>=1), totalQuantity=${total_qty} (>=3)"
 else
   fail "[7] Stats out of range: totalItems=${total_items} (want >=1), totalQuantity=${total_qty} (want >=3)"
+fi
+
+# 8. Database isolation: an unlabeled pod must not reach PostgreSQL when NetworkPolicies are active
+if ! np_lines=$(k get networkpolicies -n "$NAMESPACE" --no-headers 2>/dev/null); then
+  fail "[8] Database isolation: could not query NetworkPolicies"
+elif [ -z "$np_lines" ]; then
+  echo "  - [8] Database isolation: SKIP (no NetworkPolicies found in namespace '${NAMESPACE}')"
+else
+  PG_IMAGE=$(k get statefulset postgres -n "$NAMESPACE" \
+    -o jsonpath='{.spec.template.spec.containers[0].image}') || PG_IMAGE=""
+  if [ -z "$PG_IMAGE" ]; then
+    fail "[8] Database isolation: could not read PostgreSQL image from StatefulSet"
+  else
+    k delete pod pg-isolation-check -n "$NAMESPACE" --ignore-not-found &>/dev/null || true
+    if ! k run pg-isolation-check \
+      -n "$NAMESPACE" \
+      --image="$PG_IMAGE" \
+      --restart=Never \
+      --command -- pg_isready -h postgres -p 5432 -t 5 &>/dev/null; then
+      fail "[8] Database isolation: could not create pg-isolation-check pod"
+    else
+      iso_deadline=$((SECONDS + 60))
+      while true; do
+        pod_phase=$(k get pod pg-isolation-check -n "$NAMESPACE" \
+          -o jsonpath='{.status.phase}' 2>/dev/null) || pod_phase=""
+        if [ "$pod_phase" = "Succeeded" ] || [ "$pod_phase" = "Failed" ]; then
+          break
+        fi
+        if [ "$SECONDS" -ge "$iso_deadline" ]; then
+          pod_phase="Timeout"
+          break
+        fi
+        sleep 2
+      done
+
+      pod_logs=$(k logs pg-isolation-check -n "$NAMESPACE" 2>/dev/null) || pod_logs=""
+
+      if echo "$pod_logs" | grep -q "no response"; then
+        pass "[8] Database isolation: unlabeled pod cannot reach postgres (blocked by NetworkPolicy)"
+      elif echo "$pod_logs" | grep -q "accepting connections"; then
+        fail "[8] Database isolation: unlabeled pod reached postgres (NetworkPolicy not effective)"
+      else
+        fail "[8] Database isolation: inconclusive — phase=${pod_phase}"
+      fi
+    fi
+    k delete pod pg-isolation-check -n "$NAMESPACE" --ignore-not-found &>/dev/null || true
+  fi
 fi
 
 # --- Summary ---
