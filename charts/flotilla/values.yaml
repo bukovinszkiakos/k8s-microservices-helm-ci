@@ -6,8 +6,19 @@ global:
 existingSecret: flotilla-secrets
 
 postgres:
+  image:
+    repository: postgres
+    tag: "18.6-alpine3.24"
   database: inventory
   user: flotilla
+  storage: 1Gi
+  storageClassName: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
 
 podSecurityContext:
   runAsNonRoot: true
