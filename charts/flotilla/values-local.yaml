@@ -1,0 +1,4 @@
+global:
+  imageRegistry: local
+  imageTag: dev
+  imagePullPolicy: Never

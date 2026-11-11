@@ -15,7 +15,7 @@ k() { kubectl --context "$KUBE_CONTEXT" "$@"; }
 h() { helm --kube-context "$KUBE_CONTEXT" "$@"; }
 
 # --- Step 1: Check required tools ---
-echo "[1/9] Checking required tools..."
+echo "[1/10] Checking required tools..."
 for tool in docker kind kubectl helm openssl; do
   if ! command -v "$tool" &>/dev/null; then
     echo "ERROR: required tool not found: ${tool}"
@@ -34,7 +34,7 @@ openssl version
 
 # --- Step 2: Create the kind cluster if it does not already exist ---
 echo ""
-echo "[2/9] Checking kind cluster '${CLUSTER_NAME}'..."
+echo "[2/10] Checking kind cluster '${CLUSTER_NAME}'..."
 if kind get clusters 2>/dev/null | grep -Fxq "$CLUSTER_NAME"; then
   echo "  Cluster '${CLUSTER_NAME}' already exists, reusing it."
 else
@@ -44,7 +44,7 @@ fi
 
 # --- Step 3: Context guard ---
 echo ""
-echo "[3/9] Verifying kubectl context '${KUBE_CONTEXT}'..."
+echo "[3/10] Verifying kubectl context '${KUBE_CONTEXT}'..."
 if ! kubectl config get-contexts -o name | grep -Fx "$KUBE_CONTEXT" >/dev/null; then
   echo "ERROR: kubectl context '${KUBE_CONTEXT}' not found"
   echo "       Has the cluster been created? Run: kind create cluster --config kind/cluster.yaml"
@@ -58,7 +58,7 @@ echo "  Context '${KUBE_CONTEXT}' is valid."
 
 # --- Step 4: StorageClass check ---
 echo ""
-echo "[4/9] Checking default StorageClass..."
+echo "[4/10] Checking default StorageClass..."
 if ! k get storageclass 2>/dev/null | grep -Fq "(default)"; then
   echo "ERROR: no default StorageClass found in cluster '${CLUSTER_NAME}'"
   echo "       A default StorageClass is required for PostgreSQL persistent storage."
@@ -68,7 +68,7 @@ echo "  Default StorageClass found."
 
 # --- Step 5: Install metrics-server ---
 echo ""
-echo "[5/9] Installing metrics-server..."
+echo "[5/10] Installing metrics-server..."
 if ! helm repo list 2>/dev/null | grep -Fq "metrics-server"; then
   helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
 fi
@@ -81,7 +81,7 @@ h upgrade --install metrics-server metrics-server/metrics-server \
 
 # --- Step 6: Build and load Docker images ---
 echo ""
-echo "[6/9] Building and loading Docker images..."
+echo "[6/10] Building and loading Docker images..."
 for service in "${SERVICES[@]}"; do
   image="local/flotilla-${service}:${IMAGE_TAG}"
   echo "  Building ${image}..."
@@ -92,7 +92,7 @@ done
 
 # --- Step 7: Create namespace ---
 echo ""
-echo "[7/9] Creating namespace '${NAMESPACE}'..."
+echo "[7/10] Creating namespace '${NAMESPACE}'..."
 if ! k get namespace "$NAMESPACE" &>/dev/null; then
   k create namespace "$NAMESPACE"
   echo "  Namespace '${NAMESPACE}' created."
@@ -102,7 +102,7 @@ fi
 
 # --- Step 8: Create Secret ---
 echo ""
-echo "[8/9] Creating secret 'flotilla-secrets'..."
+echo "[8/10] Creating secret 'flotilla-secrets'..."
 if ! k get secret flotilla-secrets -n "$NAMESPACE" &>/dev/null; then
   k create secret generic flotilla-secrets \
     -n "$NAMESPACE" \
@@ -113,9 +113,18 @@ else
   echo "  Secret 'flotilla-secrets' already exists, keeping existing values."
 fi
 
-# --- Step 9: Summary ---
+# --- Step 9: Install Flotilla chart ---
 echo ""
-echo "[9/9] Cluster is ready."
+echo "[9/10] Installing Flotilla chart..."
+h upgrade --install flotilla "${REPO_ROOT}/charts/flotilla" \
+  -n "$NAMESPACE" \
+  -f "${REPO_ROOT}/charts/flotilla/values-local.yaml" \
+  --wait \
+  --timeout 5m
+
+# --- Step 10: Summary ---
+echo ""
+echo "[10/10] Cluster is ready."
 echo ""
 echo "  URL: http://localhost:8080"
 echo ""

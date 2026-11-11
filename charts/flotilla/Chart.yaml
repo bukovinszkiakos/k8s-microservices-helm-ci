@@ -1,0 +1,6 @@
+apiVersion: v2
+name: flotilla
+description: Three Node.js microservices on Kubernetes with PostgreSQL and an NGINX gateway.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

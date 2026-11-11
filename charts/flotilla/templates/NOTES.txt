@@ -1,0 +1,7 @@
+Flotilla {{ .Chart.AppVersion }} installed in namespace {{ .Release.Namespace }}.
+
+Local URL: http://localhost:8080
+(The NGINX gateway will be added in a later step.)
+
+To access the gateway with port-forward once it is deployed:
+  kubectl --context kind-flotilla -n {{ .Release.Namespace }} port-forward svc/gateway 8080:8080

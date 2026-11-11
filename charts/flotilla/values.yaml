@@ -1,0 +1,6 @@
+global:
+  imageRegistry: ghcr.io/bukovinszkiakos
+  imageTag: ""
+  imagePullPolicy: IfNotPresent
+
+existingSecret: flotilla-secrets

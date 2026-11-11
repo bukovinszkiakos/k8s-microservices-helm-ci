@@ -1,0 +1,12 @@
+# Patterns to ignore when building packages.
+.DS_Store
+# Common VCS dirs
+.git/
+.gitignore
+.gitattributes
+# CI
+.github/
+# Various IDEs
+.idea/
+*.tmproj
+.vscode/
