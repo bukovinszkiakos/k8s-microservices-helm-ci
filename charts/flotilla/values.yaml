@@ -4,3 +4,63 @@ global:
   imagePullPolicy: IfNotPresent
 
 existingSecret: flotilla-secrets
+
+postgres:
+  database: inventory
+  user: flotilla
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+services:
+  auth-service:
+    replicas: 2
+    env: {}
+    secretEnv:
+      API_TOKEN: api-token
+    resources:
+      requests:
+        cpu: 100m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+
+  inventory-service:
+    replicas: 2
+    env:
+      AUTH_URL: http://auth-service:8080
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: '{{ .Values.postgres.database }}'
+      DB_USER: '{{ .Values.postgres.user }}'
+    secretEnv:
+      DB_PASSWORD: postgres-password
+    resources:
+      requests:
+        cpu: 100m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+
+  stats-service:
+    replicas: 2
+    env:
+      INVENTORY_URL: http://inventory-service:8080
+    secretEnv: {}
+    resources:
+      requests:
+        cpu: 100m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
