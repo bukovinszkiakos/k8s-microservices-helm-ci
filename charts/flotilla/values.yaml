@@ -46,6 +46,11 @@ services:
         memory: 64Mi
       limits:
         memory: 128Mi
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 4
+      targetCPUUtilizationPercentage: 70
 
   inventory-service:
     replicas: 2
@@ -63,6 +68,11 @@ services:
         memory: 64Mi
       limits:
         memory: 128Mi
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 4
+      targetCPUUtilizationPercentage: 70
 
   stats-service:
     replicas: 2
@@ -75,6 +85,11 @@ services:
         memory: 64Mi
       limits:
         memory: 128Mi
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 4
+      targetCPUUtilizationPercentage: 70
 
 gateway:
   image:

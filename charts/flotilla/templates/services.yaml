@@ -8,7 +8,10 @@ metadata:
   labels:
     {{- include "flotilla.labels" $ | nindent 4 }}
 spec:
+  {{- /* Omit replicas when HPA is enabled; otherwise every Helm upgrade resets the count the HPA chose. */}}
+  {{- if not $svc.autoscaling.enabled }}
   replicas: {{ $svc.replicas }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "flotilla.selectorLabels" (list $name $) | nindent 6 }}
