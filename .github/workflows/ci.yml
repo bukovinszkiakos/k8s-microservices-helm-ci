@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  services:
+    name: ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - auth-service
+          - inventory-service
+          - stats-service
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Check version consistency
+        run: |
+          grep -q '^FROM node:26\.13\.0-alpine3\.24' "services/${{ matrix.service }}/Dockerfile" || {
+            echo "ERROR: services/${{ matrix.service }}/Dockerfile must use FROM node:26.13.0-alpine3.24"
+            exit 1
+          }
+          grep -q '"node": ">=26 <27"' "services/${{ matrix.service }}/package.json" || {
+            echo "ERROR: services/${{ matrix.service }}/package.json engines.node must be \">=26 <27\""
+            exit 1
+          }
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26.13.0
+          cache: npm
+          cache-dependency-path: services/${{ matrix.service }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: services/${{ matrix.service }}
+        run: npm ci
+
+      - name: Run tests
+        working-directory: services/${{ matrix.service }}
+        run: npm test
+
+      - name: Build Docker image
+        run: docker build -t local/flotilla-${{ matrix.service }}:ci services/${{ matrix.service }}
+
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  
+        with:
+          image-ref: local/flotilla-${{ matrix.service }}:ci
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
