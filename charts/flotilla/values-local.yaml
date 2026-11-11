@@ -2,3 +2,8 @@ global:
   imageRegistry: local
   imageTag: dev
   imagePullPolicy: Never
+
+gateway:
+  service:
+    type: NodePort
+    nodePort: 30080
