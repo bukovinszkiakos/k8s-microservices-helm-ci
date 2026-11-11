@@ -111,7 +111,7 @@ jobs:
         run: ./scripts/cluster-up.sh
 
       - name: Run end-to-end tests
-        run: ./scripts/e2e-test.sh
+        run: bash ./scripts/e2e-test.sh
 
       - name: Run Helm test
         run: helm --kube-context kind-flotilla -n flotilla test flotilla --logs

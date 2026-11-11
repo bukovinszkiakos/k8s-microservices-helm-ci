@@ -1,0 +1,125 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+
+jobs:
+  images:
+    name: ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        service:
+          - auth-service
+          - inventory-service
+          - stats-service
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          IFS='.' read -r MAJOR MINOR PATCH EXTRA <<< "$VERSION"
+          case "$VERSION" in
+            *[!0-9.]*|*..*|*.)
+              echo "ERROR: invalid version '${VERSION}' (from tag '${GITHUB_REF_NAME}')"
+              exit 1
+              ;;
+          esac
+          if [ -z "$MAJOR" ] || [ -z "$MINOR" ] || [ -z "$PATCH" ] || [ -n "$EXTRA" ]; then
+            echo "ERROR: invalid version '${VERSION}' (from tag '${GITHUB_REF_NAME}')"
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build image
+        run: |
+          docker build \
+            -t "ghcr.io/bukovinszkiakos/flotilla-${{ matrix.service }}:${{ steps.version.outputs.version }}" \
+            "services/${{ matrix.service }}"
+
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  
+        with:
+          image-ref: ghcr.io/bukovinszkiakos/flotilla-${{ matrix.service }}:${{ steps.version.outputs.version }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+
+      - name: Push image
+        run: docker push "ghcr.io/bukovinszkiakos/flotilla-${{ matrix.service }}:${{ steps.version.outputs.version }}"
+
+  release:
+    name: Helm chart and GitHub Release
+    needs: images
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          IFS='.' read -r MAJOR MINOR PATCH EXTRA <<< "$VERSION"
+          case "$VERSION" in
+            *[!0-9.]*|*..*|*.)
+              echo "ERROR: invalid version '${VERSION}' (from tag '${GITHUB_REF_NAME}')"
+              exit 1
+              ;;
+          esac
+          if [ -z "$MAJOR" ] || [ -z "$MINOR" ] || [ -z "$PATCH" ] || [ -n "$EXTRA" ]; then
+            echo "ERROR: invalid version '${VERSION}' (from tag '${GITHUB_REF_NAME}')"
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Install Helm
+        uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e  
+        with:
+          version: v4.3.1
+
+      - name: Package chart
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          # Chart.yaml keeps its development version; the Git tag is the single source of truth
+          # for release versions. --app-version ensures the chart's default image tag resolves
+          # to the matching release images (the flotilla.image helper falls back to appVersion
+          # when global.imageTag is empty).
+          helm package charts/flotilla --version "$VERSION" --app-version "$VERSION"
+
+      - name: Log in to GHCR for Helm OCI
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Push chart to GHCR OCI
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          helm push "flotilla-${VERSION}.tgz" oci://ghcr.io/bukovinszkiakos/charts
+
+      - name: Create GitHub Release
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          gh release create "v${VERSION}" "flotilla-${VERSION}.tgz" \
+            --generate-notes \
+            --title "Flotilla v${VERSION}"
+        env:
+          GH_TOKEN: ${{ github.token }}
