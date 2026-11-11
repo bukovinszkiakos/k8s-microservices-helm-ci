@@ -1,5 +1,6 @@
 import { createDb } from './db.js';
 import { createApp } from './app.js';
+import { createAuthClient } from './auth-client.js';
 
 const REQUIRED = ['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD', 'AUTH_URL'];
 for (const key of REQUIRED) {
@@ -20,9 +21,11 @@ const db = createDb({
   password: process.env.DB_PASSWORD,
 });
 
+const authClient = createAuthClient({ authUrl: process.env.AUTH_URL });
+
 const state = { initialized: false, shuttingDown: false };
 
-const app = createApp({ db, authClient: null, state });
+const app = createApp({ db, authClient, state });
 
 const server = app.listen(PORT, () => {
   console.log(`inventory-service listening on port ${PORT}`);

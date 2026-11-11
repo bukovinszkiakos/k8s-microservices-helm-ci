@@ -27,9 +27,17 @@ export function createDb({ host, port, database, user, password }) {
     await pool.query('SELECT 1');
   }
 
+  async function createItem(name, quantity) {
+    const { rows } = await pool.query(
+      'INSERT INTO items (name, quantity) VALUES ($1, $2) RETURNING *',
+      [name, quantity]
+    );
+    return rows[0];
+  }
+
   async function close() {
     await pool.end();
   }
 
-  return { init, listItems, ping, close };
+  return { init, listItems, createItem, ping, close };
 }
