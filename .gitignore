@@ -1,0 +1,27 @@
+# Node.js
+node_modules/
+npm-debug.log*
+*.log
+
+# Testing and coverage
+coverage/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Build / package artifacts
+*.tgz
+
+# Kubernetes credentials
+kubeconfig*
+*.kubeconfig
+
+# IDE
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
