@@ -58,9 +58,68 @@ jobs:
         run: docker build -t local/flotilla-${{ matrix.service }}:ci services/${{ matrix.service }}
 
       - name: Scan image with Trivy
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           image-ref: local/flotilla-${{ matrix.service }}:ci
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: '1'
+
+  chart:
+    name: Helm chart
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Helm
+        uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e  
+        with:
+          version: v4.3.1
+
+      - name: Lint and render chart
+        run: |
+          helm lint charts/flotilla
+          helm lint charts/flotilla -f charts/flotilla/values-local.yaml
+          helm template flotilla charts/flotilla --namespace flotilla
+          helm template flotilla charts/flotilla --namespace flotilla -f charts/flotilla/values-local.yaml
+
+  e2e:
+    name: End-to-end
+    needs: [services, chart]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install kind and kubectl
+        uses: helm/kind-action@ea822c7bf1874f08e5a491df991c228edffc3376  
+        with:
+          version: v0.33.0
+          kubectl_version: v1.37.1
+          install_only: true
+
+      - name: Install Helm
+        uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e  
+        with:
+          version: v4.3.1
+
+      - name: Create cluster and deploy
+        run: ./scripts/cluster-up.sh
+
+      - name: Run end-to-end tests
+        run: ./scripts/e2e-test.sh
+
+      - name: Run Helm test
+        run: helm --kube-context kind-flotilla -n flotilla test flotilla --logs
+
+      - name: Collect cluster diagnostics on failure
+        if: failure()
+        run: |
+          kubectl --context kind-flotilla -n flotilla get all,pvc,hpa,networkpolicy -o wide || true
+          kubectl --context kind-flotilla -n flotilla get events --sort-by=.lastTimestamp || true
+          kubectl --context kind-flotilla -n flotilla describe pods || true
+          kubectl --context kind-flotilla -n flotilla logs --all-containers --prefix --tail=100 -l app.kubernetes.io/part-of=flotilla || true
